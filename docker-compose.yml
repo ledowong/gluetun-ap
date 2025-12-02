@@ -1,0 +1,17 @@
+services:
+  gluetun:
+    image: qmcgaw/gluetun:v3.40
+    container_name: gluetun
+    cap_add:
+      - NET_ADMIN
+    restart: unless-stopped
+    env_file:
+      - .env
+    networks:
+      vpn_net: {}
+
+networks:
+  vpn_net:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: br-gluetun

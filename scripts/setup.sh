@@ -20,6 +20,8 @@ FIREWALL_SCRIPT_DST="/usr/local/lib/gluetun-ap/apply-firewall.sh"
 SYSTEMD_UNIT_DST="/etc/systemd/system/gluetun-ap-firewall.service"
 ROUTING_SCRIPT_DST="/usr/local/lib/gluetun-ap/apply-routing.sh"
 ROUTING_UNIT_DST="/etc/systemd/system/gluetun-ap-routing.service"
+DOCKER_KEYRING="/etc/apt/keyrings/docker.asc"
+DOCKER_LIST="/etc/apt/sources.list.d/docker.sources"
 
 require_root() {
   if [[ $EUID -ne 0 ]]; then
@@ -59,6 +61,36 @@ ensure_packages() {
 }
 
 ensure_packages hostapd
+
+install_docker() {
+  if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+    echo_step "Docker already installed"
+    return
+  fi
+  echo_step "Installing Docker from official repository"
+  apt-get update
+  apt-get install -y ca-certificates curl
+  install -m 0755 -d /etc/apt/keyrings
+  curl -fsSL https://download.docker.com/linux/debian/gpg -o "$DOCKER_KEYRING"
+  chmod a+r "$DOCKER_KEYRING"
+  cat > "$DOCKER_LIST" <<EOF
+Types: deb
+URIs: https://download.docker.com/linux/debian
+Suites: $(. /etc/os-release && echo "$VERSION_CODENAME")
+Components: stable
+Signed-By: $DOCKER_KEYRING
+EOF
+  apt-get update
+  apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  systemctl enable --now docker.service
+  systemctl enable --now containerd.service
+  # Add invoking user to docker group if available
+  if [[ -n "${SUDO_USER:-}" ]]; then
+    usermod -aG docker "$SUDO_USER" || true
+  fi
+}
+
+install_docker
 
 echo_step "Copying hostapd config"
 backup_if_exists "$HOSTAPD_CONF_DST"

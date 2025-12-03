@@ -8,8 +8,9 @@ This repo wires a Raspberry Pi AP so that only Wi-Fi clients use the gluetun VPN
 - `config/hostapd.conf`: sample 5 GHz AP config for `wlan0`.
 - `config/dnsmasq.conf`: DHCP/DNS for `192.168.50.0/24` handing out NordVPN DNS IPs.
 - `scripts/apply-firewall.sh`: iptables rules to allow only AP → gluetun and drop AP → WAN.
-- `systemd/gluetun-ap-firewall.service`: systemd unit to run the firewall script after Docker.
+- `systemd/gluetun-ap-firewall.service`: systemd unit to run the firewall script after Docker (installed, not enabled by default).
 - `docker/gluetun/init.sh`: ensures NAT/forwarding inside the gluetun container before starting.
+- `scripts/apply-routing.sh` & `systemd/gluetun-ap-routing.service`: policy routing and FORWARD rules for AP → gluetun, enabled to persist across reboot.
 
 ## Addresses & interfaces
 - AP subnet: `192.168.50.0/24`; Pi on `192.168.50.1`.
@@ -27,6 +28,7 @@ This repo wires a Raspberry Pi AP so that only Wi-Fi clients use the gluetun VPN
 7) Firewall: place `scripts/apply-firewall.sh` at `/usr/local/lib/gluetun-ap/apply-firewall.sh`, `chmod +x` it. Copy `systemd/gluetun-ap-firewall.service` to `/etc/systemd/system/` and edit `ExecStart` path if different. Then `sudo systemctl daemon-reload && sudo systemctl enable --now gluetun-ap-firewall.service`.  
 8) Gluetun env: copy `.env.example` to `.env`, fill NordVPN credentials and region.  
 9) Bring up VPN: `docker compose up -d` (from repo directory). The `br-gluetun` bridge will be created automatically.  
+10) Routing/NAT persistence: `scripts/setup.sh` installs `gluetun-ap-routing.service`, which re-applies the AP→gluetun policy route and FORWARD rules after Docker starts. It is enabled by default in the setup script.  
 
 ## Firewall behavior
 - `FORWARD` default DROP stays; a custom `AP_VPN` chain allows only `wlan0` → `br-gluetun` (with return traffic).  
@@ -34,6 +36,7 @@ This repo wires a Raspberry Pi AP so that only Wi-Fi clients use the gluetun VPN
 - NAT only for `192.168.50.0/24` out `br-gluetun` (no MASQUERADE to WAN).  
 - Host outbound and SSH inbound are unaffected (OUTPUT/INPUT chains).  
 - Inside gluetun, `docker/gluetun/init.sh` adds MASQUERADE on `tun0` and permits forward `eth0 <-> tun0` so AP traffic can exit the VPN.  
+- On the host, `gluetun-ap-routing.service` reapplies the AP policy route via `br-gluetun` and inserts high-priority FORWARD accepts for `wlan0 <-> br-gluetun` after boot.  
 
 ## Gluetun DNS choice
 DNS inside gluetun is disabled (`DNS_SERVER=off`, `DOT=off`, `DNS=off`); `dnsmasq` hands out NordVPN DNS IPs (`103.86.96.100`, `103.86.99.100`) so AP client DNS rides the VPN path.

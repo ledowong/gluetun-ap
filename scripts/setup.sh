@@ -11,11 +11,15 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HOSTAPD_CONF_SRC="$REPO_ROOT/config/hostapd.conf"
 FIREWALL_SCRIPT_SRC="$REPO_ROOT/scripts/apply-firewall.sh"
 SYSTEMD_UNIT_SRC="$REPO_ROOT/systemd/gluetun-ap-firewall.service"
+ROUTING_SCRIPT_SRC="$REPO_ROOT/scripts/apply-routing.sh"
+ROUTING_UNIT_SRC="$REPO_ROOT/systemd/gluetun-ap-routing.service"
 
 HOSTAPD_CONF_DST="/etc/hostapd/hostapd.conf"
 SYSCTL_DROPIN="/etc/sysctl.d/99-gluetun-ap.conf"
 FIREWALL_SCRIPT_DST="/usr/local/lib/gluetun-ap/apply-firewall.sh"
 SYSTEMD_UNIT_DST="/etc/systemd/system/gluetun-ap-firewall.service"
+ROUTING_SCRIPT_DST="/usr/local/lib/gluetun-ap/apply-routing.sh"
+ROUTING_UNIT_DST="/etc/systemd/system/gluetun-ap-routing.service"
 
 require_root() {
   if [[ $EUID -ne 0 ]]; then
@@ -89,6 +93,13 @@ install -m 644 "$SYSTEMD_UNIT_SRC" "$SYSTEMD_UNIT_DST"
 systemctl daemon-reload
 # Not auto-starting firewall to keep SSH accessible during debugging
 # systemctl enable --now gluetun-ap-firewall.service
+
+echo_step "Installing routing script and unit"
+install -m 755 "$ROUTING_SCRIPT_SRC" "$ROUTING_SCRIPT_DST"
+install -m 644 "$ROUTING_UNIT_SRC" "$ROUTING_UNIT_DST"
+systemctl daemon-reload
+# Enable routing unit so rules persist across reboot (runs after Docker)
+systemctl enable --now gluetun-ap-routing.service
 
 echo_step "Restarting hostapd"
 systemctl restart hostapd || true

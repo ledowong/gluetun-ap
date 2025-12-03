@@ -10,6 +10,17 @@ services:
     networks:
       vpn_net: {}
 
+  dnsmasq:
+    build:
+      context: ./docker/dnsmasq
+      dockerfile: Dockerfile
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - ./config/dnsmasq.conf:/etc/dnsmasq.conf:ro
+    restart: unless-stopped
+
 networks:
   vpn_net:
     driver: bridge

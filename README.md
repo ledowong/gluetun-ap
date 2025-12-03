@@ -9,6 +9,7 @@ This repo wires a Raspberry Pi AP so that only Wi-Fi clients use the gluetun VPN
 - `config/dnsmasq.conf`: DHCP/DNS for `192.168.50.0/24` handing out NordVPN DNS IPs.
 - `scripts/apply-firewall.sh`: iptables rules to allow only AP → gluetun and drop AP → WAN.
 - `systemd/gluetun-ap-firewall.service`: systemd unit to run the firewall script after Docker.
+- `docker/gluetun/init.sh`: ensures NAT/forwarding inside the gluetun container before starting.
 
 ## Addresses & interfaces
 - AP subnet: `192.168.50.0/24`; Pi on `192.168.50.1`.
@@ -32,6 +33,7 @@ This repo wires a Raspberry Pi AP so that only Wi-Fi clients use the gluetun VPN
 - `DOCKER-USER` drop rule blocks `wlan0` → `eth0` so AP clients cannot leak to WAN.  
 - NAT only for `192.168.50.0/24` out `br-gluetun` (no MASQUERADE to WAN).  
 - Host outbound and SSH inbound are unaffected (OUTPUT/INPUT chains).  
+- Inside gluetun, `docker/gluetun/init.sh` adds MASQUERADE on `tun0` and permits forward `eth0 <-> tun0` so AP traffic can exit the VPN.  
 
 ## Gluetun DNS choice
 DNS inside gluetun is disabled (`DNS_SERVER=off`, `DOT=off`, `DNS=off`); `dnsmasq` hands out NordVPN DNS IPs (`103.86.96.100`, `103.86.99.100`) so AP client DNS rides the VPN path.

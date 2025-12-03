@@ -4,9 +4,12 @@ services:
     container_name: gluetun
     cap_add:
       - NET_ADMIN
+    entrypoint: ["/init.sh"]
     restart: unless-stopped
     env_file:
       - .env
+    volumes:
+      - ./docker/gluetun/init.sh:/init.sh:ro
     networks:
       vpn_net: {}
 

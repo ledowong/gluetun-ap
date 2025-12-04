@@ -196,6 +196,20 @@ echo_step "Bringing up Docker stack (all services in compose)"
 cd "$REPO_ROOT"
 docker compose up -d
 
+echo_step "Waiting for gluetun to report healthy"
+gluetun_status=""
+for i in $(seq 1 60); do
+  gluetun_status="$(docker inspect -f '{{.State.Health.Status}}' gluetun 2>/dev/null || true)"
+  if [[ "$gluetun_status" == "healthy" ]]; then
+    break
+  fi
+  sleep 1
+done
+if [[ "$gluetun_status" != "healthy" ]]; then
+  echo "gluetun did not become healthy; last status: ${gluetun_status:-unknown}" >&2
+  exit 1
+fi
+
 echo_step "Configuring routing and forwarding to gluetun"
 # Grab gluetun IP on br-gluetun
 GLUETUN_IP="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' gluetun 2>/dev/null || true)"

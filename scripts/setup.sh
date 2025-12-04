@@ -156,8 +156,7 @@ install -d "$(dirname "$FIREWALL_SCRIPT_DST")"
 install -m 755 "$FIREWALL_SCRIPT_SRC" "$FIREWALL_SCRIPT_DST"
 install -m 644 "$SYSTEMD_UNIT_SRC" "$SYSTEMD_UNIT_DST"
 systemctl daemon-reload
-# Not auto-starting firewall to keep SSH accessible during debugging
-# systemctl enable --now gluetun-ap-firewall.service
+systemctl enable --now gluetun-ap-firewall.service
 
 echo_step "Installing routing script and unit"
 install -m 755 "$ROUTING_SCRIPT_SRC" "$ROUTING_SCRIPT_DST"

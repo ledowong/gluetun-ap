@@ -13,10 +13,17 @@ ipt() {
 }
 
 echo "Resolving gluetun container IP on ${GLUETUN_BR}..."
-GLUETUN_IP="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' gluetun 2>/dev/null || true)"
+# Wait for gluetun to be up so systemd can retry if missing
+for i in $(seq 1 20); do
+  GLUETUN_IP="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' gluetun 2>/dev/null || true)"
+  if [[ -n "$GLUETUN_IP" ]]; then
+    break
+  fi
+  sleep 3
+done
 if [[ -z "$GLUETUN_IP" ]]; then
-  echo "gluetun IP not found; skipping routing apply (container not running yet?)" >&2
-  exit 0
+  echo "gluetun IP not found after waiting; will retry via systemd restart." >&2
+  exit 1
 fi
 
 echo "Configuring policy routing table ${TABLE} for ${AP_NET} via ${GLUETUN_BR} (${GLUETUN_IP})"

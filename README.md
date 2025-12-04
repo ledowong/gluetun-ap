@@ -7,10 +7,10 @@ This repo wires a Raspberry Pi AP so that only Wi-Fi clients use the gluetun VPN
 - `.env.example`: NordVPN/gluetun env vars with DNS disabled.
 - `config/hostapd.conf`: sample 5 GHz AP config for `wlan0`.
 - `config/dnsmasq.conf`: DHCP/DNS for `192.168.50.0/24` handing out NordVPN DNS IPs.
-- `scripts/apply-firewall.sh`: iptables rules to allow only AP → gluetun and drop AP → WAN.
-- `systemd/gluetun-ap-firewall.service`: systemd unit to run the firewall script after Docker (installed, not enabled by default).
+- `scripts/apply-firewall.sh`: iptables rules to allow only AP → gluetun and drop AP → WAN (fail-closed).
+- `systemd/gluetun-ap-firewall.service`: systemd unit to run the firewall script after Docker (enabled by the setup script).
 - `docker/gluetun/init.sh`: ensures NAT/forwarding inside the gluetun container before starting.
-- `scripts/apply-routing.sh` & `systemd/gluetun-ap-routing.service`: policy routing and FORWARD rules for AP → gluetun, enabled to persist across reboot.
+- `scripts/apply-routing.sh` & `systemd/gluetun-ap-routing.service`: policy routing and FORWARD rules for AP → gluetun, enabled to persist across reboot (service waits/retries until gluetun is up).
 
 ## Addresses & interfaces
 - AP subnet: `192.168.50.0/24`; Pi on `192.168.50.1`.
@@ -34,7 +34,7 @@ This repo wires a Raspberry Pi AP so that only Wi-Fi clients use the gluetun VPN
 ## Firewall behavior
 - `FORWARD` default DROP stays; a custom `AP_VPN` chain allows only `wlan0` → `br-gluetun` (with return traffic).  
 - `DOCKER-USER` drop rule blocks `wlan0` → `eth0` so AP clients cannot leak to WAN.  
-- NAT only for `192.168.50.0/24` out `br-gluetun` (no MASQUERADE to WAN).  
+- NAT happens only inside gluetun (tun0); host does not MASQUERADE the AP subnet.  
 - Host outbound and SSH inbound are unaffected (OUTPUT/INPUT chains).  
 - Inside gluetun, `docker/gluetun/init.sh` adds MASQUERADE on `tun0` and permits forward `eth0 <-> tun0` so AP traffic can exit the VPN.  
 - On the host, `gluetun-ap-routing.service` reapplies the AP policy route via `br-gluetun` and inserts high-priority FORWARD accepts for `wlan0 <-> br-gluetun` after boot.  

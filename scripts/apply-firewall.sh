@@ -32,9 +32,4 @@ if ! ipt -t filter -C FORWARD -j AP_VPN 2>/dev/null; then
   ipt -t filter -I FORWARD 1 -j AP_VPN
 fi
 
-# MASQUERADE AP subnet out to gluetun bridge only
-if ! ipt -t nat -C POSTROUTING -s "$AP_NET" -o "$GLUETUN_BR" -j MASQUERADE 2>/dev/null; then
-  ipt -t nat -A POSTROUTING -s "$AP_NET" -o "$GLUETUN_BR" -j MASQUERADE
-fi
-
-echo "Firewall rules applied for AP ${AP_NET} via ${GLUETUN_BR}; WAN ${WAN_IFACE} blocked for AP clients."
+echo "Firewall rules applied for AP ${AP_NET} via ${GLUETUN_BR}; WAN ${WAN_IFACE} blocked for AP clients (NAT handled inside gluetun)."

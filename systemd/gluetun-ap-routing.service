@@ -5,6 +5,10 @@ Requires=docker.service
 
 [Service]
 Type=oneshot
+Restart=on-failure
+RestartSec=10
+StartLimitIntervalSec=300
+StartLimitBurst=5
 ExecStart=/usr/local/lib/gluetun-ap/apply-routing.sh
 RemainAfterExit=yes
 

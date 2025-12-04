@@ -22,6 +22,9 @@ ROUTING_SCRIPT_DST="/usr/local/lib/gluetun-ap/apply-routing.sh"
 ROUTING_UNIT_DST="/etc/systemd/system/gluetun-ap-routing.service"
 DOCKER_KEYRING="/etc/apt/keyrings/docker.asc"
 DOCKER_LIST="/etc/apt/sources.list.d/docker.sources"
+DHCPCD_CONF="/etc/dhcpcd.conf"
+DHCPCD_MARKER_BEGIN="# gluetun-ap BEGIN"
+DHCPCD_MARKER_END="# gluetun-ap END"
 
 require_root() {
   if [[ $EUID -ne 0 ]]; then
@@ -92,6 +95,23 @@ EOF
 
 install_docker
 
+ensure_dhcpcd_static_ip() {
+  echo_step "Ensuring persistent static IP for ${AP_IFACE} via dhcpcd.conf"
+  backup_if_exists "$DHCPCD_CONF"
+  # Remove previous block if present
+  if grep -q "$DHCPCD_MARKER_BEGIN" "$DHCPCD_CONF"; then
+    sed -i "/$DHCPCD_MARKER_BEGIN/,/$DHCPCD_MARKER_END/d" "$DHCPCD_CONF"
+  fi
+  cat >> "$DHCPCD_CONF" <<EOF
+$DHCPCD_MARKER_BEGIN
+interface ${AP_IFACE}
+static ip_address=${AP_CIDR}
+nohook wpa_supplicant
+$DHCPCD_MARKER_END
+EOF
+  systemctl restart dhcpcd || true
+}
+
 echo_step "Copying hostapd config"
 backup_if_exists "$HOSTAPD_CONF_DST"
 install -d "$(dirname "$HOSTAPD_CONF_DST")"
@@ -107,6 +127,8 @@ if command -v rfkill >/dev/null 2>&1; then
 fi
 ip link set "$AP_IFACE" up
 ip addr replace "$AP_CIDR" dev "$AP_IFACE"
+
+ensure_dhcpcd_static_ip
 
 echo_step "Unmasking/enabling hostapd"
 systemctl unmask hostapd || true

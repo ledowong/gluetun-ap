@@ -15,8 +15,8 @@ ipt() {
 echo "Resolving gluetun container IP on ${GLUETUN_BR}..."
 GLUETUN_IP="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' gluetun 2>/dev/null || true)"
 if [[ -z "$GLUETUN_IP" ]]; then
-  echo "gluetun IP not found; is the container running?" >&2
-  exit 1
+  echo "gluetun IP not found; skipping routing apply (container not running yet?)" >&2
+  exit 0
 fi
 
 echo "Configuring policy routing table ${TABLE} for ${AP_NET} via ${GLUETUN_BR} (${GLUETUN_IP})"

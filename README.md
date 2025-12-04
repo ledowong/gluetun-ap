@@ -2,6 +2,8 @@
 
 This repo wires a Raspberry Pi AP so that only Wi-Fi clients use the gluetun VPN container, while host traffic stays on the normal WAN. The firewall is fail-closed: if VPN/tun stops passing traffic, AP clients simply lose internet instead of leaking to WAN.
 
+**Tested/known-good**: Raspberry Pi 3B+, Raspberry Pi OS *Bullseye* 64-bit Lite. Newer kernels (Bookworm/Trixie) have shown Wi‑Fi driver instability/oops; use Bullseye for best stability.
+
 ## What’s here
 - `docker-compose.yml`: gluetun container on a fixed bridge (`br-gluetun`).
 - `.env.example`: NordVPN/gluetun env vars with DNS disabled.
@@ -18,18 +20,10 @@ This repo wires a Raspberry Pi AP so that only Wi-Fi clients use the gluetun VPN
 - WAN: `eth0`.
 - Gluetun bridge: `br-gluetun` (created by Compose).
 
-## Setup steps
-1) Install dependencies (example): `sudo apt install hostapd dnsmasq iptables-persistent docker.io docker-compose-plugin`  
-2) Set `wlan0` static IP `192.168.50.1/24` (e.g., `/etc/dhcpcd.conf`).  
-3) hostapd: copy `config/hostapd.conf` to `/etc/hostapd/hostapd.conf`, edit SSID/passphrase, enable/start hostapd.  
-4) dnsmasq: copy `config/dnsmasq.conf` to `/etc/dnsmasq.d/ap.conf`, adjust if needed, restart dnsmasq.  
-5) IP forwarding: create `/etc/sysctl.d/99-ipforward.conf` with `net.ipv4.ip_forward=1`, then `sudo sysctl --system`.  
-6) iptables backend: ensure iptables-legacy (better with Docker on Pi): `sudo update-alternatives --config iptables` → pick legacy.  
-7) Firewall: place `scripts/apply-firewall.sh` at `/usr/local/lib/gluetun-ap/apply-firewall.sh`, `chmod +x` it. Copy `systemd/gluetun-ap-firewall.service` to `/etc/systemd/system/` and edit `ExecStart` path if different. Then `sudo systemctl daemon-reload && sudo systemctl enable --now gluetun-ap-firewall.service`.  
-8) Gluetun env: copy `.env.example` to `.env`, fill NordVPN credentials and region.  
-9) Bring up VPN: `docker compose up -d` (from repo directory). The `br-gluetun` bridge will be created automatically.  
-10) Routing/NAT persistence: `scripts/setup.sh` installs `gluetun-ap-routing.service`, which re-applies the AP→gluetun policy route and FORWARD rules after Docker starts. It is enabled by default in the setup script.  
-11) Persistent AP IP: the setup script writes a `wlan0` static IP into `/etc/systemd/network/10-wlan0.network` (systemd-networkd) so `192.168.50.1/24` survives reboot.  
+## Quick setup (preferred)
+1) Copy `.env.example` to `.env` and fill your NordVPN credentials (OpenVPN or WireGuard key), keep `DNS_SERVER=off`, `FIREWALL=on`.
+2) Run `sudo ./scripts/setup.sh` from the repo root on a **Bullseye 64-bit Lite** Pi 3B+. The script installs Docker/hostapd, configures static IP via systemd-networkd, brings up gluetun + dnsmasq, applies routing, and enables the firewall, ready, and routing units for reboot.
+   - For WireGuard keys from NordVPN, use: `curl https://api.nordvpn.com/v1/users/services/credentials -u 'token:<nord_vpn_token>'`
 
 ## Firewall behavior
 - `FORWARD` default DROP stays; a custom `AP_VPN` chain allows only `wlan0` → `br-gluetun` (with return traffic).  
@@ -40,8 +34,4 @@ This repo wires a Raspberry Pi AP so that only Wi-Fi clients use the gluetun VPN
 - On the host, `gluetun-ap-routing.service` reapplies the AP policy route via `br-gluetun` and inserts high-priority FORWARD accepts for `wlan0 <-> br-gluetun` after boot.  
 
 ## Gluetun DNS choice
-DNS inside gluetun is disabled (`DNS_SERVER=off`, `DOT=off`, `DNS=off`); `dnsmasq` hands out NordVPN DNS IPs (`103.86.96.100`, `103.86.99.100`) so AP client DNS rides the VPN path.
-
-## Variables for `apply-firewall.sh`
-- `AP_IFACE` (default `wlan0`), `WAN_IFACE` (default `eth0`), `GLUETUN_BR` (default `br-gluetun`), `AP_NET` (default `192.168.50.0/24`).  
-These can be exported before running the script if your naming changes.
+DNS inside gluetun is disabled (`DNS_SERVER=off`, `DOT=off`, `DNS=off`); `dnsmasq` hands out your VPN provider’s DNS IPs (`103.86.96.100`, `103.86.99.100`) so AP client DNS rides the VPN path and avoids DNS leaks.

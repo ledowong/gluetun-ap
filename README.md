@@ -29,7 +29,7 @@ This repo wires a Raspberry Pi AP so that only Wi-Fi clients use the gluetun VPN
 8) Gluetun env: copy `.env.example` to `.env`, fill NordVPN credentials and region.  
 9) Bring up VPN: `docker compose up -d` (from repo directory). The `br-gluetun` bridge will be created automatically.  
 10) Routing/NAT persistence: `scripts/setup.sh` installs `gluetun-ap-routing.service`, which re-applies the AP→gluetun policy route and FORWARD rules after Docker starts. It is enabled by default in the setup script.  
-11) Persistent AP IP: the setup script writes a `wlan0` static IP block into `/etc/dhcpcd.conf` so `192.168.50.1/24` survives reboot.  
+11) Persistent AP IP: the setup script writes a `wlan0` static IP into `/etc/systemd/network/10-wlan0.network` (systemd-networkd) so `192.168.50.1/24` survives reboot.  
 
 ## Firewall behavior
 - `FORWARD` default DROP stays; a custom `AP_VPN` chain allows only `wlan0` → `br-gluetun` (with return traffic).  

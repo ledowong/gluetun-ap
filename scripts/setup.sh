@@ -20,11 +20,11 @@ FIREWALL_SCRIPT_DST="/usr/local/lib/gluetun-ap/apply-firewall.sh"
 SYSTEMD_UNIT_DST="/etc/systemd/system/gluetun-ap-firewall.service"
 ROUTING_SCRIPT_DST="/usr/local/lib/gluetun-ap/apply-routing.sh"
 ROUTING_UNIT_DST="/etc/systemd/system/gluetun-ap-routing.service"
+READY_UNIT_DST="/etc/systemd/system/gluetun-ap-ready.service"
 DOCKER_KEYRING="/etc/apt/keyrings/docker.asc"
 DOCKER_LIST="/etc/apt/sources.list.d/docker.sources"
-DHCPCD_CONF="/etc/dhcpcd.conf"
-DHCPCD_MARKER_BEGIN="# gluetun-ap BEGIN"
-DHCPCD_MARKER_END="# gluetun-ap END"
+NETWORKD_DIR="/etc/systemd/network"
+NETWORKD_CONF="/etc/systemd/network/10-${AP_IFACE}.network"
 
 require_root() {
   if [[ $EUID -ne 0 ]]; then
@@ -95,21 +95,33 @@ EOF
 
 install_docker
 
-ensure_dhcpcd_static_ip() {
-  echo_step "Ensuring persistent static IP for ${AP_IFACE} via dhcpcd.conf"
-  backup_if_exists "$DHCPCD_CONF"
-  # Remove previous block if present
-  if grep -q "$DHCPCD_MARKER_BEGIN" "$DHCPCD_CONF"; then
-    sed -i "/$DHCPCD_MARKER_BEGIN/,/$DHCPCD_MARKER_END/d" "$DHCPCD_CONF"
+stop_existing() {
+  echo_step "Stopping existing AP services and Docker stack (if running)"
+  systemctl stop gluetun-ap-ready.service gluetun-ap-routing.service gluetun-ap-firewall.service hostapd 2>/dev/null || true
+  if command -v docker >/dev/null 2>&1; then
+    (cd "$REPO_ROOT" && docker compose down || true)
   fi
-  cat >> "$DHCPCD_CONF" <<EOF
-$DHCPCD_MARKER_BEGIN
-interface ${AP_IFACE}
-static ip_address=${AP_CIDR}
-nohook wpa_supplicant
-$DHCPCD_MARKER_END
+}
+
+stop_existing
+
+ensure_networkd_static_ip() {
+  echo_step "Configuring persistent static IP for ${AP_IFACE} via systemd-networkd"
+  install -d "$NETWORKD_DIR"
+  cat > "$NETWORKD_CONF" <<EOF
+[Match]
+Name=${AP_IFACE}
+
+[Network]
+Address=${AP_CIDR}
+ConfigureWithoutCarrier=yes
+DHCP=no
 EOF
-  systemctl restart dhcpcd || true
+  # Prefer networkd; disable dhcpcd if present to avoid conflicts
+  if systemctl list-unit-files | grep -q '^dhcpcd.service'; then
+    systemctl disable --now dhcpcd || true
+  fi
+  systemctl enable --now systemd-networkd
 }
 
 echo_step "Copying hostapd config"
@@ -128,11 +140,10 @@ fi
 ip link set "$AP_IFACE" up
 ip addr replace "$AP_CIDR" dev "$AP_IFACE"
 
-ensure_dhcpcd_static_ip
+ensure_networkd_static_ip
 
 echo_step "Unmasking/enabling hostapd"
 systemctl unmask hostapd || true
-systemctl enable hostapd || true
 
 echo_step "Enabling IPv4 forwarding"
 cat > "$SYSCTL_DROPIN" <<EOF
@@ -155,8 +166,32 @@ systemctl daemon-reload
 # Enable routing unit so rules persist across reboot (runs after Docker)
 systemctl enable --now gluetun-ap-routing.service
 
-echo_step "Restarting hostapd"
-systemctl restart hostapd || true
+echo_step "Installing ready unit to start hostapd + dnsmasq after gluetun is healthy"
+cat > "$READY_UNIT_DST" <<EOF
+[Unit]
+Description=Start AP (hostapd) and dnsmasq only after gluetun is healthy and routing applied
+After=docker.service gluetun-ap-routing.service
+Requires=docker.service gluetun-ap-routing.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c '\
+  for i in \$(seq 1 60); do \
+    status=\$(docker inspect -f "{{.State.Health.Status}}" gluetun 2>/dev/null || true); \
+    if [ "\$status" = "healthy" ]; then break; fi; \
+    sleep 3; \
+  done; \
+  systemctl start hostapd; \
+  cd "$REPO_ROOT" && docker compose up -d dnsmasq \
+'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload
+systemctl disable hostapd || true
+systemctl enable gluetun-ap-ready.service
 
 echo_step "Bringing up Docker stack (all services in compose)"
 cd "$REPO_ROOT"

@@ -163,7 +163,7 @@ install -m 755 "$ROUTING_SCRIPT_SRC" "$ROUTING_SCRIPT_DST"
 install -m 644 "$ROUTING_UNIT_SRC" "$ROUTING_UNIT_DST"
 systemctl daemon-reload
 # Enable routing unit so rules persist across reboot (runs after Docker)
-systemctl enable --now gluetun-ap-routing.service
+systemctl enable gluetun-ap-routing.service
 
 echo_step "Installing ready unit to start hostapd + dnsmasq after gluetun is healthy"
 cat > "$READY_UNIT_DST" <<EOF
@@ -219,6 +219,13 @@ ip -4 addr show dev "$AP_IFACE"
 systemctl --no-pager status hostapd || true
 systemctl --no-pager status gluetun-ap-firewall || true
 docker compose ps
+
+echo_step "Starting AP after gluetun is up"
+if systemctl start gluetun-ap-ready.service; then
+  echo "AP start triggered via ready unit."
+else
+  echo "Could not start ready unit now; it will run on next boot."
+fi
 
 echo
 echo "Setup complete. Connect an AP client, it should get 192.168.50.x and exit via VPN."

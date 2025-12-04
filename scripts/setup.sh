@@ -214,18 +214,18 @@ iptables -t nat -D POSTROUTING -s 192.168.50.0/24 -o br-gluetun -j MASQUERADE 2>
 iptables -I FORWARD 1 -i "$AP_IFACE" -o br-gluetun -s 192.168.50.0/24 -j ACCEPT
 iptables -I FORWARD 2 -i br-gluetun -o "$AP_IFACE" -d 192.168.50.0/24 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 
-echo_step "Status"
-ip -4 addr show dev "$AP_IFACE"
-systemctl --no-pager status hostapd || true
-systemctl --no-pager status gluetun-ap-firewall || true
-docker compose ps
-
 echo_step "Starting AP after gluetun is up"
 if systemctl start gluetun-ap-ready.service; then
   echo "AP start triggered via ready unit."
 else
   echo "Could not start ready unit now; it will run on next boot."
 fi
+
+echo_step "Status"
+ip -4 addr show dev "$AP_IFACE"
+systemctl --no-pager status hostapd || true
+systemctl --no-pager status gluetun-ap-firewall || true
+docker compose ps
 
 echo
 echo "Setup complete. Connect an AP client, it should get 192.168.50.x and exit via VPN."
